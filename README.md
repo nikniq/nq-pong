@@ -10,13 +10,14 @@ Face the CPU on three difficulty levels or play local 2P on one keyboard. Win a 
 - **Three CPU personalities** — Chill (forgiving), Classic (the reference experience), and Insane (predictive AI).
 - **Local 2P** — Player 1 on `W`/`S`, Player 2 on the arrow keys.
 - **Pointer/touch support** — drag on your half of the board.
-- **Hall of fame** — server-ranked scores, ordered by points then fastest match clock.
+- **Hall of fame** — file-backed ranked scores, ordered by points then fastest match clock.
+- **No database required** — sessions, cache, and scores all use local files.
 - **Responsive neon UI** — landing page, dedicated play page, leaderboard, and fullscreen mode.
 
 ## Stack
 
 - PHP 8.3+ / Laravel 13
-- SQLite by default (any Laravel-supported database works)
+- No database required (file sessions, file cache, JSON leaderboard)
 - Vite 8 + Tailwind CSS 4 + vanilla JavaScript
 - PHPUnit 12
 
@@ -26,8 +27,6 @@ Face the CPU on three difficulty levels or play local 2P on one keyboard. Win a 
 composer install
 cp .env.example .env
 php artisan key:generate
-touch database/database.sqlite
-php artisan migrate
 npm install
 npm run build
 php artisan serve
@@ -59,6 +58,16 @@ The rename is wired up in three places:
 
 Point your web server's document root at `public_html/`. The application code and `.env` stay above the web root.
 
+## No database required
+
+There is no database connection, migration, or `.sqlite` file needed to run the site:
+
+- **Sessions, cache, and queue drivers** are `file`, `file`, and `sync` in `.env.example`. As a safety net, `AppServiceProvider` overrides any lingering `database` drivers in production so a missing SQLite file cannot cause a 500.
+- **Leaderboard scores** are stored in `storage/app/leaderboard.json`, managed by `App\Support\Leaderboard`. The file is created automatically on the first submitted score.
+- Override the score file location with `LEADERBOARD_PATH` if needed. Ensure `storage/app/` is writable by the web server.
+
+If you later add a database, remove the driver override in `AppServiceProvider` and switch the relevant drivers back in `.env`.
+
 ## Game controls
 
 | Action | Keys |
@@ -88,8 +97,9 @@ app/
   Http/Controllers/GameController.php        # landing + play pages
   Http/Controllers/LeaderboardController.php # board + score submission
   Http/Requests/StoreScoreRequest.php        # score validation
-  Models/Score.php                           # ranking scopes and helpers
-database/migrations/..._create_scores_table.php
+  Support/Leaderboard.php                    # file-backed store + ranking
+  Support/LeaderboardEntry.php               # one ranked result
+config/leaderboard.php                       # score file path
 public_html/                                 # web root (built assets live here)
 resources/
   css/app.css                                # Tailwind + arcade components
@@ -113,17 +123,16 @@ tests/
 php artisan test
 ```
 
-The test suite uses in-memory SQLite and disables Vite manifest lookups, so it runs without a frontend build.
+The test suite writes scores to a temporary JSON file and disables Vite manifest lookups, so no database or frontend build is required.
 
 ## Production notes
 
 ```sh
 composer install --no-dev --optimize-autoloader
 npm ci && npm run build
-php artisan migrate --force
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 ```
 
-Ensure `storage/` and `bootstrap/cache/` are writable by the web server, and set `APP_ENV=production`, `APP_DEBUG=false`, and the correct `APP_URL` in `.env`.
+Ensure `storage/`, `storage/app/`, and `bootstrap/cache/` are writable by the web server, and set `APP_ENV=production`, `APP_DEBUG=false`, and the correct `APP_URL` in `.env`.

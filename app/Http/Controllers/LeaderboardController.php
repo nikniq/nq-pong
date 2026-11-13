@@ -3,21 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreScoreRequest;
-use App\Models\Score;
+use App\Support\Leaderboard;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 
 class LeaderboardController extends Controller
 {
+    public function __construct(private readonly Leaderboard $leaderboard) {}
+
     /**
      * Show the hall of fame.
      */
     public function index(): View
     {
         return view('leaderboard', [
-            'scores' => Score::ranked()->limit(50)->get(),
-            'totalMatches' => Score::count(),
+            'scores' => $this->leaderboard->top(Leaderboard::MAX_ENTRIES),
+            'totalMatches' => $this->leaderboard->count(),
         ]);
     }
 
@@ -26,17 +28,17 @@ class LeaderboardController extends Controller
      */
     public function store(StoreScoreRequest $request): JsonResponse|RedirectResponse
     {
-        $score = Score::create($request->validated());
+        $entry = $this->leaderboard->add($request->validated());
 
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => 'Score locked in. Welcome to the hall of fame!',
-                'rank' => Score::rankOf($score),
+                'rank' => $entry->rank,
                 'entry' => [
-                    'player_name' => $score->player_name,
-                    'score' => $score->score,
-                    'difficulty' => $score->difficulty,
-                    'duration_seconds' => $score->duration_seconds,
+                    'player_name' => $entry->player_name,
+                    'score' => $entry->score,
+                    'difficulty' => $entry->difficulty,
+                    'duration_seconds' => $entry->duration_seconds,
                 ],
             ], 201);
         }

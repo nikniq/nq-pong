@@ -2,13 +2,10 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class SiteTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_the_home_page_loads_the_arcade(): void
     {
         $response = $this->get('/');

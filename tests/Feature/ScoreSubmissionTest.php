@@ -2,15 +2,33 @@
 
 namespace Tests\Feature;
 
-use App\Models\Score;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Support\Leaderboard;
 use Tests\TestCase;
 
 class ScoreSubmissionTest extends TestCase
 {
-    use RefreshDatabase;
+    private string $leaderboardPath;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->leaderboardPath = sys_get_temp_dir().'/neon-pong-leaderboard-'.bin2hex(random_bytes(8)).'.json';
+
+        config(['leaderboard.path' => $this->leaderboardPath]);
+    }
+
+    protected function tearDown(): void
+    {
+        if (is_file($this->leaderboardPath)) {
+            unlink($this->leaderboardPath);
+        }
+
+        parent::tearDown();
+    }
 
     /**
+     * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>
      */
     private function payload(array $overrides = []): array
@@ -23,6 +41,11 @@ class ScoreSubmissionTest extends TestCase
         ], $overrides);
     }
 
+    private function leaderboard(): Leaderboard
+    {
+        return app(Leaderboard::class);
+    }
+
     public function test_a_finished_match_can_be_posted_to_the_leaderboard(): void
     {
         $response = $this->postJson(route('scores.store'), $this->payload());
@@ -31,12 +54,9 @@ class ScoreSubmissionTest extends TestCase
         $response->assertJsonPath('rank', 1);
         $response->assertJsonPath('entry.player_name', 'Neo');
 
-        $this->assertDatabaseHas('scores', [
-            'player_name' => 'Neo',
-            'score' => 7,
-            'difficulty' => 'classic',
-            'duration_seconds' => 95,
-        ]);
+        $this->assertFileExists($this->leaderboardPath);
+        $this->assertCount(1, $this->leaderboard()->all());
+        $this->assertSame('Neo', $this->leaderboard()->all()->first()->player_name);
     }
 
     public function test_the_form_fallback_redirects_to_the_leaderboard(): void
@@ -45,14 +65,15 @@ class ScoreSubmissionTest extends TestCase
 
         $response->assertRedirect(route('leaderboard'));
         $response->assertSessionHas('status');
-        $this->assertDatabaseCount('scores', 1);
+        $this->assertCount(1, $this->leaderboard()->all());
     }
 
     public function test_scores_are_ranked_by_points_then_fastest_time(): void
     {
-        Score::create(['player_name' => 'Slow Poke', 'score' => 7, 'difficulty' => 'chill', 'duration_seconds' => 180]);
-        Score::create(['player_name' => 'Quick Draw', 'score' => 7, 'difficulty' => 'insane', 'duration_seconds' => 62]);
-        Score::create(['player_name' => 'Rookie', 'score' => 3, 'difficulty' => 'chill', 'duration_seconds' => 40]);
+        $board = $this->leaderboard();
+        $board->add(['player_name' => 'Slow Poke', 'score' => 7, 'difficulty' => 'chill', 'duration_seconds' => 180]);
+        $board->add(['player_name' => 'Quick Draw', 'score' => 7, 'difficulty' => 'insane', 'duration_seconds' => 62]);
+        $board->add(['player_name' => 'Rookie', 'score' => 3, 'difficulty' => 'chill', 'duration_seconds' => 40]);
 
         $response = $this->get(route('leaderboard'));
 
@@ -62,8 +83,9 @@ class ScoreSubmissionTest extends TestCase
 
     public function test_rank_of_a_new_score_is_calculated_correctly(): void
     {
-        Score::create(['player_name' => 'Quick Draw', 'score' => 7, 'difficulty' => 'insane', 'duration_seconds' => 62]);
-        Score::create(['player_name' => 'Slow Poke', 'score' => 7, 'difficulty' => 'chill', 'duration_seconds' => 180]);
+        $board = $this->leaderboard();
+        $board->add(['player_name' => 'Quick Draw', 'score' => 7, 'difficulty' => 'insane', 'duration_seconds' => 62]);
+        $board->add(['player_name' => 'Slow Poke', 'score' => 7, 'difficulty' => 'chill', 'duration_seconds' => 180]);
 
         $response = $this->postJson(route('scores.store'), $this->payload([
             'player_name' => 'Mid Pace',
@@ -72,6 +94,33 @@ class ScoreSubmissionTest extends TestCase
 
         $response->assertCreated();
         $response->assertJsonPath('rank', 2);
+    }
+
+    public function test_the_store_keeps_only_the_best_fifty_entries(): void
+    {
+        $board = $this->leaderboard();
+
+        for ($index = 1; $index <= 55; $index += 1) {
+            $board->add([
+                'player_name' => "Player {$index}",
+                'score' => 7,
+                'difficulty' => 'classic',
+                'duration_seconds' => 200 - $index,
+            ]);
+        }
+
+        $this->assertCount(Leaderboard::MAX_ENTRIES, $board->all());
+        $this->assertSame('Player 55', $board->all()->first()->player_name);
+    }
+
+    public function test_a_corrupt_store_reads_as_empty(): void
+    {
+        file_put_contents($this->leaderboardPath, '{not valid json');
+
+        $response = $this->get(route('leaderboard'));
+
+        $response->assertOk();
+        $response->assertSee('The wall is empty');
     }
 
     public function test_invalid_scores_are_rejected(): void
@@ -85,6 +134,6 @@ class ScoreSubmissionTest extends TestCase
 
         $response->assertUnprocessable();
         $response->assertJsonValidationErrors(['player_name', 'score', 'difficulty', 'duration_seconds']);
-        $this->assertDatabaseCount('scores', 0);
+        $this->assertCount(0, $this->leaderboard()->all());
     }
 }

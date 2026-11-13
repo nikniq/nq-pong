@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Score;
+use App\Support\Leaderboard;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,8 +25,8 @@ class StoreScoreRequest extends FormRequest
     {
         return [
             'player_name' => ['required', 'string', 'min:2', 'max:24'],
-            'score' => ['required', 'integer', 'min:0', 'max:'.Score::WINNING_SCORE],
-            'difficulty' => ['required', 'string', Rule::in(Score::DIFFICULTIES)],
+            'score' => ['required', 'integer', 'min:0', 'max:'.Leaderboard::WINNING_SCORE],
+            'difficulty' => ['required', 'string', Rule::in(Leaderboard::DIFFICULTIES)],
             'duration_seconds' => ['required', 'integer', 'min:1', 'max:3600'],
         ];
     }
