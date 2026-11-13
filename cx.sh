@@ -68,8 +68,8 @@ if [ -z "$1" ]; then
   echo "Neon Pong — acting on $PROJECT ($REMOTE:~/$REMOTE_APP)"
   echo "-------------------------------------------------------------"
   echo "ROUTINE"
-  echo "20 : DEPLOY: pull + deps + assets + caches (runs deploy.sh)"
-  echo "21 : ASSETS: build locally and upload public_html/build"
+  echo "20 : DEPLOY: build assets, push, then pull + caches on server"
+  echo "21 : ASSETS: rsync public_html/build directly (skip git)"
   echo "22 : WHAT'S LIVE: compare server HEAD with local"
   echo "24 : CACHES: rebuild config/routes/views"
   echo "25 : CACHES: clear everything"
@@ -102,6 +102,11 @@ PARAM2="${2:-}"
 case "$SELECTION" in
   "20" )
   banner "DEPLOY: $PROJECT"
+  # Assets are built here and committed; the server never runs npm.
+  npm run build || exit 1
+  if [ -n "$(git status --porcelain -- public_html/build)" ]; then
+    git add public_html/build && git commit -q -m "Build assets" && git push -q && echo "✓ committed + pushed fresh build"
+  fi
   check_pushed
   remote_tty "./deploy.sh"
   log_history "Deployed $PROJECT"

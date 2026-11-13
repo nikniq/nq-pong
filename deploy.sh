@@ -2,26 +2,20 @@
 #
 # Production deploy for Neon Pong. Run ON the server, from the app root:
 #
-#   ./deploy.sh            # pull + deps + assets + caches
+#   ./deploy.sh            # pull + deps + caches
 #
-# Neon Pong has no database, so there is nothing to migrate. What can drift
-# is dependencies and the Vite build: public_html/build is gitignored, so a
-# pull alone ships Blade views that point at assets the server doesn't have.
+# Neon Pong has no database, so there is nothing to migrate. Vite assets are
+# built LOCALLY and committed in public_html/build — the server never runs npm.
 #
-# Counterpart: cx.sh (LOCAL). If the server has no node/npm, cx.sh option 21
-# builds locally and rsyncs public_html/build up instead.
+# Counterpart: cx.sh (LOCAL).
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
 echo "→ git pull"
 LOCK_BEFORE=$(git rev-parse HEAD:composer.lock 2>/dev/null || echo none)
-PKG_BEFORE=$(git rev-parse HEAD:package-lock.json 2>/dev/null || echo none)
-ASSETS_BEFORE=$(git rev-parse HEAD:resources 2>/dev/null || echo none)
 git pull --ff-only
 LOCK_AFTER=$(git rev-parse HEAD:composer.lock 2>/dev/null || echo none)
-PKG_AFTER=$(git rev-parse HEAD:package-lock.json 2>/dev/null || echo none)
-ASSETS_AFTER=$(git rev-parse HEAD:resources 2>/dev/null || echo none)
 
 if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ] || [ ! -d vendor ]; then
     if command -v composer >/dev/null 2>&1; then
@@ -32,16 +26,10 @@ if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ] || [ ! -d vendor ]; then
     fi
 fi
 
-if [ "$PKG_BEFORE" != "$PKG_AFTER" ] || [ "$ASSETS_BEFORE" != "$ASSETS_AFTER" ] \
-   || [ ! -f public_html/build/manifest.json ]; then
-    if command -v npm >/dev/null 2>&1; then
-        echo "→ npm ci && npm run build"
-        npm ci --no-audit --no-fund
-        npm run build
-    else
-        echo "⚠ Assets changed but npm is not on PATH."
-        echo "  Run cx.sh option 21 locally to build and upload public_html/build."
-    fi
+# Assets are built locally and committed (public_html/build), so the pull
+# above already brought them. Nothing to build here — just check.
+if [ ! -f public_html/build/manifest.json ]; then
+    echo "⚠ public_html/build/manifest.json missing — run 'npm run build' locally, commit, push."
 fi
 
 # The leaderboard lives in storage/app; make sure storage is writable.

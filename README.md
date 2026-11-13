@@ -54,7 +54,7 @@ The rename is wired up in three places:
 
 1. **`bootstrap/app.php`** — calls `$app->usePublicPath($app->basePath('public_html'))`, which updates `public_path()`, `php artisan serve`, storage links, and the Vite manifest lookup.
 2. **`vite.config.js`** — sets `publicDirectory: 'public_html'`, `buildDirectory: 'build'`, and `hotFile: 'public_html/hot'`, so dev and production assets are emitted to `public_html/build`.
-3. **`.gitignore`** — ignores `public_html/build`, `public_html/hot`, and `public_html/storage`.
+3. **`.gitignore`** — ignores `public_html/hot` and `public_html/storage`. `public_html/build` is **committed**: assets are built locally (`npm run build`) and the server never runs npm.
 
 Point your web server's document root at `public_html/`. The application code and `.env` stay above the web root.
 

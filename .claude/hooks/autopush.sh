@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Stop hook: commit everything and push to origin after each Claude turn.
 cd "$CLAUDE_PROJECT_DIR" 2>/dev/null || cd "$(dirname "$0")/../.."
+# Rebuild Vite assets locally when their sources changed, so the committed
+# public_html/build always matches (the server never builds).
+if [ -n "$(git status --porcelain -- resources vite.config.js package.json package-lock.json)" ]; then
+  npm run build >/tmp/autopush-build.log 2>&1 || {
+    echo '{"systemMessage": "Auto-push skipped: npm run build failed (see /tmp/autopush-build.log)"}'; exit 0; }
+fi
 git add -A
 if ! git diff --cached --quiet; then
   FILES=$(git diff --cached --name-only | head -5 | paste -sd, - | sed 's/,/, /g')
